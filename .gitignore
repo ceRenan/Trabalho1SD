@@ -1,0 +1,22 @@
+# Byte-compiled / cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Arquivos temporarios de execucao / dados gerados em tempo real
+data/*.csv
+
+# IDEs e editores
+.vscode/
+.idea/
+*.swp
+
+# Arquivos do sistema operacional
+.DS_Store
+Thumbs.db
+Desktop.ini

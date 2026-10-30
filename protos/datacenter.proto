@@ -1,0 +1,226 @@
+syntax = "proto3";
+
+package dcim;
+
+enum SourceType {
+  SOURCE_TYPE_UNSPECIFIED = 0;
+  PRECISION_AC = 1;
+  RACK_SENSOR  = 2;
+  PDU          = 3;
+}
+
+enum SourceStatus {
+  STATUS_UNKNOWN = 0;
+  ONLINE  = 1;
+  STANDBY = 2;
+  FAULT   = 3;
+  OFFLINE = 4;
+}
+
+message AcSettings {
+  float  setpoint_c    = 1;
+  uint32 fan_speed_pct = 2;
+}
+
+message SensorSettings {
+  float alert_threshold_c = 1;
+}
+
+message PduSettings {
+  float rated_capacity_kw = 1;
+  float overload_pct      = 2;
+}
+
+message DeviceState {
+  string       source_id         = 1;
+  SourceType   source_type       = 2;
+  SourceStatus status            = 3;
+  bool         powered_on        = 4;
+  uint32       report_interval_s = 5;
+  bool         failure_simulated = 6;
+  oneof settings {
+    AcSettings     ac     = 10;
+    SensorSettings sensor = 11;
+    PduSettings    pdu    = 12;
+  }
+}
+
+message SourceInfo {
+  string      source_id     = 1;
+  SourceType  source_type   = 2;
+  string      ip            = 3;
+  uint32      port          = 4;
+  string      rack_id       = 5;
+  bool        controllable  = 6;
+  DeviceState initial_state = 7;
+}
+
+message DiscoveryRequest {
+  string gateway_id   = 1;
+  string gateway_ip   = 2;
+  uint32 data_port    = 3;
+  uint32 reply_port   = 4;
+  int64  timestamp_ms = 5;
+}
+
+message DiscoveryResponse {
+  SourceInfo info         = 1;
+  int64      timestamp_ms = 2;
+}
+
+message AcReading {
+  float  supply_air_c  = 1;
+  float  return_air_c  = 2;
+  float  setpoint_c    = 3;
+  uint32 fan_speed_pct = 4;
+  float  power_kw      = 5;
+}
+
+message RackEnvReading {
+  float temperature_c     = 1;
+  float humidity_pct      = 2;
+  float alert_threshold_c = 3;
+}
+
+message PduReading {
+  float power_kw   = 1;
+  float current_a  = 2;
+  float voltage_v  = 3;
+  float energy_kwh = 4;
+}
+
+enum EventKind {
+  NO_EVENT      = 0;
+  ALARM_RAISED  = 1;
+  ALARM_CLEARED = 2;
+  STATE_CHANGED = 3;
+}
+
+message DataPacket {
+  string       source_id         = 1;
+  SourceType   source_type       = 2;
+  string       rack_id           = 3;
+  uint64       sequence          = 4;
+  int64        timestamp_ms      = 5;
+  SourceStatus status            = 6;
+  EventKind    event             = 7;
+  string       event_description = 8;
+  oneof payload {
+    AcReading      ac          = 10;
+    RackEnvReading environment = 11;
+    PduReading     pdu         = 12;
+  }
+}
+
+message StateRequest {}
+message SetPowerRequest          { bool   on      = 1; }
+message SetReportIntervalRequest { uint32 seconds = 1; }
+message SetSetpointRequest       { float  celsius = 1; }
+message SetFanSpeedRequest       { uint32 percent = 1; }
+message SetThresholdRequest      { float  celsius = 1; }
+message SimulateFailureRequest   { bool   active  = 1; }
+
+message CommandReply {
+  bool        success = 1;
+  string      message = 2;
+  DeviceState state   = 3;
+}
+
+service PrecisionAcService {
+  rpc GetState          (StateRequest)             returns (DeviceState);
+  rpc SetPower          (SetPowerRequest)          returns (CommandReply);
+  rpc SetSetpoint       (SetSetpointRequest)       returns (CommandReply);
+  rpc SetFanSpeed       (SetFanSpeedRequest)       returns (CommandReply);
+  rpc SetReportInterval (SetReportIntervalRequest) returns (CommandReply);
+  rpc SimulateFailure   (SimulateFailureRequest)   returns (CommandReply);
+}
+
+service RackSensorService {
+  rpc GetState          (StateRequest)             returns (DeviceState);
+  rpc SetPower          (SetPowerRequest)          returns (CommandReply);
+  rpc SetReportInterval (SetReportIntervalRequest) returns (CommandReply);
+  rpc SetAlertThreshold (SetThresholdRequest)      returns (CommandReply);
+  rpc SimulateFailure   (SimulateFailureRequest)   returns (CommandReply);
+}
+
+message ListSourcesRequest {
+  bool refresh = 1;
+}
+
+message ControlCommand {
+  string source_id = 1;
+  oneof action {
+    SetPowerRequest          set_power     = 10;
+    SetReportIntervalRequest set_interval  = 11;
+    SetSetpointRequest       set_setpoint  = 12;
+    SetFanSpeedRequest       set_fan_speed = 13;
+    SetThresholdRequest      set_threshold = 14;
+    SimulateFailureRequest   set_failure   = 15;
+  }
+}
+
+enum QueryType {
+  QUERY_UNSPECIFIED   = 0;
+  HOTTEST_RACK        = 1;
+  PEAK_POWER          = 2;
+  AVERAGE_TEMPERATURE = 3;
+  ENERGY_BY_RACK      = 4;
+  ALERTS_BY_RACK      = 5;
+  READING_HISTORY     = 6;
+}
+
+message QueryRequest {
+  QueryType type           = 1;
+  uint32    window_seconds = 2;
+  string    source_id      = 3;
+  uint32    limit          = 4;
+}
+
+message QueryRow {
+  string label        = 1;
+  double value        = 2;
+  string unit         = 3;
+  string detail       = 4;
+  int64  timestamp_ms = 5;
+}
+
+message QueryResponse {
+  QueryType         type    = 1;
+  string            title   = 2;
+  repeated QueryRow rows    = 3;
+  string            summary = 4;
+}
+
+message SourceSummary {
+  SourceInfo   info             = 1;
+  SourceStatus status           = 2;
+  DeviceState  state            = 3;
+  int64        last_seen_ms     = 4;
+  DataPacket   last_packet      = 5;
+  uint64       packets_received = 6;
+  uint64       packets_lost     = 7;
+}
+
+message ListSourcesResponse {
+  repeated SourceSummary sources = 1;
+}
+
+message ClientRequest {
+  uint32 request_id = 1;
+  oneof body {
+    ListSourcesRequest list_sources = 10;
+    ControlCommand     command      = 11;
+    QueryRequest       query        = 12;
+  }
+}
+
+message GatewayResponse {
+  uint32 request_id = 1;
+  bool   success    = 2;
+  string error      = 3;
+  oneof body {
+    ListSourcesResponse sources       = 10;
+    CommandReply        command_reply = 11;
+    QueryResponse       query         = 12;
+  }
+}
